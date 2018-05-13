@@ -9,17 +9,23 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
+#include <sys/time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "esp_wifi.h"
 #include "esp_wpa2.h"
 #include "esp_event_loop.h"
+#include "esp_attr.h"
+#include "esp_sleep.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "nvs_flash.h"
 #include "tcpip_adapter.h"
 #include "esp_smartconfig.h"
+#include "lwip/err.h"
+#include "apps/sntp/sntp.h"
 
 /* FreeRTOS event group to signal when we are connected & ready to make a request */
 static EventGroupHandle_t wifi_event_group;
@@ -30,6 +36,9 @@ static EventGroupHandle_t wifi_event_group;
 static const int CONNECTED_BIT = BIT0;
 static const int ESPTOUCH_DONE_BIT = BIT1;
 static const char *TAG = "sc";
+
+static void obtain_time(void);
+static void initialize_sntp(void);
 
 void smartconfig_example_task(void * parm);
 
@@ -118,9 +127,51 @@ void smartconfig_example_task(void * parm)
     }
 }
 
+static void obtain_time(void)
+{
+    ESP_ERROR_CHECK( nvs_flash_init() );
+//    initialise_wifi();
+//    xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT,
+                        false, true, portMAX_DELAY);
+    initialize_sntp();
+
+    // wait for time to be set
+    time_t now = 0;
+    struct tm timeinfo = { 0 };
+    int retry = 0;
+    const int retry_count = 10;
+    while(timeinfo.tm_year < (2016 - 1900) && ++retry < retry_count) {
+        ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
+        time(&now);
+        localtime_r(&now, &timeinfo);
+    }
+
+    ESP_ERROR_CHECK( esp_wifi_stop() );
+}
+
+static void initialize_sntp(void)
+{
+    ESP_LOGI(TAG, "Initializing SNTP");
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_init(); 
+}
+
 void app_main()
 {
     ESP_ERROR_CHECK( nvs_flash_init() );
     initialise_wifi();
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    // Is time set? If not, tm_year will be (1970 - 1900).
+    if (timeinfo.tm_year < (2016 - 1900)) {
+        ESP_LOGI(TAG, "Time is not set yet. Connecting to WiFi and getting time over NTP.");
+        obtain_time();
+        // update 'now' variable with current time
+        time(&now);
+    }
 }
 
