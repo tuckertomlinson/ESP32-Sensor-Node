@@ -26,6 +26,14 @@
 #include "esp_smartconfig.h"
 #include "lwip/err.h"
 #include "apps/sntp/sntp.h"
+#include <esp_mqtt.h>
+
+#define MQTT_HOST "argo"
+#define MQTT_USER "ESP32-logger"
+#define MQTT_PASS "testpass"
+#define MQTT_PORT "1833"
+#define MQTT_COMMAND_CHANNEL "ESP32-Node-Control"
+
 
 /* FreeRTOS event group to signal when we are connected & ready to make a request */
 static EventGroupHandle_t wifi_event_group;
@@ -50,9 +58,15 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
         break;
     case SYSTEM_EVENT_STA_GOT_IP:
         xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
+	// start mqtt
+	esp_mqtt_start(MQTT_HOST, MQTT_PORT, "esp-mqtt", MQTT_USER, MQTT_PASS);
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
-        esp_wifi_connect();
+      // stop mqtt
+      esp_mqtt_stop();
+
+      // reconnect wifi
+	esp_wifi_connect();
         xEventGroupClearBits(wifi_event_group, CONNECTED_BIT);
         break;
     default:
@@ -104,11 +118,23 @@ static void sc_callback(smartconfig_status_t status, void *pdata)
             }
             xEventGroupSetBits(wifi_event_group, ESPTOUCH_DONE_BIT);
             break;
+    	case ESP_MQTT_STATUS_CONNECTED:
+      		// subscribe
+      		esp_mqtt_subscribe(COMMAND_CHANNEL, 2);
+      		break;
+    	case ESP_MQTT_STATUS_DISCONNECTED:
+      		// reconnect
+      		esp_mqtt_start(MQTT_HOST, MQTT_PORT, "esp-mqtt", MQTT_USER, MQTT_PASS);
+		break;
         default:
             break;
     }
 }
-
+static void message_callback(const char *topic, uint8_t *payload, size_t len) {
+	//callback for MQTT messages
+	//TODO, check command and update frequency, or start/stop streaming
+  	ESP_LOGI("test", "incoming: %s => %s (%d)", topic, payload, (int)len);
+}
 void smartconfig_example_task(void * parm)
 {
     EventBits_t uxBits;
@@ -160,33 +186,56 @@ static void initialize_sntp(void)
 
 void app_main()
 {
-    ESP_ERROR_CHECK( nvs_flash_init() );
-    initialise_wifi();
-    time_t now;
-    struct tm timeinfo;
-    time(&now);
-    localtime_r(&now, &timeinfo);
+    	ESP_ERROR_CHECK( nvs_flash_init() );
+    	initialise_wifi();
+    	time_t now;
+    	struct tm timeinfo;
+    	time(&now);
+    	localtime_r(&now, &timeinfo);
     // Is time set? If not, tm_year will be (1970 - 1900).
-    if (timeinfo.tm_year < (2016 - 1900)) {
-        ESP_LOGI(TAG, "Time is not set yet. Connecting to WiFi and getting time over NTP.");
-        obtain_time();
-        // update 'now' variable with current time
-        time(&now);
-    }
-    char strftime_buf[64];
+    	if (timeinfo.tm_year < (2016 - 1900)) {
+        	ESP_LOGI(TAG, "Time is not set yet. Connecting to WiFi and getting time over NTP.");
+        	obtain_time();
+        	// update 'now' variable with current time
+        	time(&now);
+    	}
 
+    char strftime_buf[64];
     // Set timezone to Eastern Standard Time and print local time
-    setenv("TZ", "EST5EDT,M3.2.0/2,M11.1.0", 1);
-    tzset();
-    localtime_r(&now, &timeinfo);
-    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-    ESP_LOGI(TAG, "The current date/time in New York is: %s", strftime_buf);
+	setenv("TZ", "EST5EDT,M3.2.0/2,M11.1.0", 1);
+	tzset();
+	localtime_r(&now, &timeinfo);
+	strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+	ESP_LOGI(TAG, "The current date/time in New York is: %s", strftime_buf);
 
     // Set timezone to China Standard Time
-    setenv("TZ", "CST-8", 1);
-    tzset();
-    localtime_r(&now, &timeinfo);
-    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-    ESP_LOGI(TAG, "The current date/time in Shanghai is: %s", strftime_buf);
+	setenv("TZ", "CST-8", 1);
+	tzset();
+    	localtime_r(&now, &timeinfo);
+    	strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+    	ESP_LOGI(TAG, "The current date/time in Shanghai is: %s", strftime_buf);
+
+    //begin MQTT process
+    	esp_mqtt_init(esp_mqtt_status_callback_t scb, esp_mqtt_message_callback_t mcb, size_t buffer_size, int command_timeout);	
+    //Establish MQTT last will and testimate
+    //esp_mqtt_lwt(const char *topic, const char *payload, int qos, bool retained);
+    	esp_mqtt_start(const char *host, const char *port, const char *client_id, const char *username, const char *password);
+    //wait for connection?
+
+    //subscribe to control channel
+    	bool esp_mqtt_subscribe(const char *topic, int qos);
+    //begin pushing data
+	//TODO: change while loop to timer watchdog/callback
+	int i=0;    
+	while (i<10){
+		//grab data from ADC
+		//publish ADC data
+    		esp_mqtt_publish(const char *topic, uint8_t *payload, size_t len, int qos, bool retained);
+		i++;
+    	}
+    //unsubscribe
+    //bool esp_mqtt_unsubscribe(const char *topic);
+    //stop MQTT process
+    //esp_mqtt_stop();
 }
 
