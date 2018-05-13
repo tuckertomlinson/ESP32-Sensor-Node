@@ -26,7 +26,10 @@
 #include "esp_smartconfig.h"
 #include "lwip/err.h"
 #include "apps/sntp/sntp.h"
-#include <esp_mqtt.h>
+#include "driver/gpio.h"
+#include "driver/adc.h"
+#include "esp_adc_cal.h"
+#include "esp_mqtt.h"
 
 #define MQTT_HOST "argo"
 #define MQTT_USER "ESP32-logger"
@@ -34,6 +37,13 @@
 #define MQTT_PORT "1833"
 #define MQTT_COMMAND_CHANNEL "ESP32-Node-Control"
 
+#define DEFAULT_VREF    1100        //Use adc2_vref_to_gpio() to obtain a better estimate
+#define NO_OF_SAMPLES   64          //Multisampling
+
+static esp_adc_cal_characteristics_t *adc_chars;
+static const adc_channel_t channel = ADC_CHANNEL_6;     //GPIO34 if ADC1, GPIO14 if ADC2
+static const adc_atten_t atten = ADC_ATTEN_DB_0;
+static const adc_unit_t unit = ADC_UNIT_1;
 
 /* FreeRTOS event group to signal when we are connected & ready to make a request */
 static EventGroupHandle_t wifi_event_group;
@@ -49,6 +59,42 @@ static void obtain_time(void);
 static void initialize_sntp(void);
 
 void smartconfig_example_task(void * parm);
+
+static void check_efuse()
+{
+    //Check TP is burned into eFuse
+    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK) {
+	ESP_LOGI(TAG, "eFuse Two Point: Supported\n");
+        //printf("eFuse Two Point: Supported\n");
+    } else {
+        ESP_LOGI(TAG, "eFuse Two Point: NOT Supported\n");
+        //printf("eFuse Two Point: NOT supported\n");
+    }
+
+    //Check Vref is burned into eFuse
+    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_VREF) == ESP_OK) {
+        ESP_LOGI(TAG, "eFuse Vref: Supported\n");
+        //printf("eFuse Vref: Supported\n");
+    } else {
+        ESP_LOGI(TAG, "eFuse Vref: NOT Supported\n");
+        //printf("eFuse Vref: NOT supported\n");
+    }
+}
+
+static void print_char_val_type(esp_adc_cal_value_t val_type)
+{
+    if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
+        ESP_LOGI(TAG, "Characterized using Two Point Value\n");
+        //printf("Characterized using Two Point Value\n");
+    } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
+        ESP_LOGI(TAG, "Characterized using eFuse Vref\n");
+        //printf("Characterized using eFuse Vref\n");
+    } else {
+        ESP_LOGI(TAG, "Characterized using Default Vref\n");
+        //printf("Characterized using Default Vref\n");
+    }
+}
+
 
 static esp_err_t event_handler(void *ctx, system_event_t *event)
 {
@@ -220,18 +266,41 @@ void app_main()
     //Establish MQTT last will and testimate
     //esp_mqtt_lwt(const char *topic, const char *payload, int qos, bool retained);
     	esp_mqtt_start(const char *host, const char *port, const char *client_id, const char *username, const char *password);
-    //wait for connection?
 
-    //subscribe to control channel
-    	bool esp_mqtt_subscribe(const char *topic, int qos);
+    //set up ADC
+	check_efuse();
+    	if (unit == ADC_UNIT_1) {
+        	adc1_config_width(ADC_WIDTH_BIT_12);
+        	adc1_config_channel_atten(channel, atten);
+    	} else {
+        	adc2_config_channel_atten((adc2_channel_t)channel, atten);
+	}
+	uint32_t adc_reading = 0;
+
     //begin pushing data
 	//TODO: change while loop to timer watchdog/callback
 	int i=0;    
 	while (i<10){
 		//grab data from ADC
+		adc_reading = 0;
+        	//Multisampling
+        	for (int i = 0; i < NO_OF_SAMPLES; i++) {
+            		if (unit == ADC_UNIT_1) {
+                		adc_reading += adc1_get_raw((adc1_channel_t)channel);
+            		} else {
+                		int raw;
+                		adc2_get_raw((adc2_channel_t)channel, ADC_WIDTH_BIT_12, &raw);
+                		adc_reading += raw;
+            		}
+        	}
+        	adc_reading /= NO_OF_SAMPLES;
+        	//Convert adc_reading to voltage in mV
+        	uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
+		ESP_LOGI(TAG, "Raw: %d\tVoltage: %dmV\n", adc_reading, voltage);
 		//publish ADC data
     		esp_mqtt_publish(const char *topic, uint8_t *payload, size_t len, int qos, bool retained);
 		i++;
+		vTaskDelay(pdMS_TO_TICKS(1000));
     	}
     //unsubscribe
     //bool esp_mqtt_unsubscribe(const char *topic);
