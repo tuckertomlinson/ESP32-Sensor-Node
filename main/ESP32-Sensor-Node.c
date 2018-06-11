@@ -217,7 +217,7 @@ static void esp_mqtt_message_callback(const char *topic, uint8_t *payload, size_
 				break;
 			case ESP_SN_CMD_RATE
 				/* set rate at which the ADC will be polled */
-				if len!=sizeof(sensor_node_rate)/sizeof(*payload){
+				if (len!=sizeof(sensor_node_rate)/sizeof(payload[0])) {
 					/* note the following assumes that len only contains the number of elements in payload. If len includes the topic, or the len element itself, we need to adjust this */
 					ESP_LOGI(TAG, "Got bad sample rate packet with %d bytes",sizeof(payload[0])*len);			
 				}else{
@@ -227,7 +227,7 @@ static void esp_mqtt_message_callback(const char *topic, uint8_t *payload, size_
 				break;
 			case ESP_SN_CMD_PKT_LEN
 				/* set how many samples are in each packet. Sets the effective update rate */
-				if len!=sizeof(sensor_node_rate)/sizeof(*payload){
+				if (len!=sizeof(sensor_node_rate)/sizeof(*payload)) {
 					/* note the following assumes that len only contains the number of elements in payload. If len includes the topic, or the len element itself, we need to adjust this */
 					ESP_LOGI(TAG, "Got bad pkt_len packet with %d bytes",sizeof(payload[0])*len);			
 				}else{
