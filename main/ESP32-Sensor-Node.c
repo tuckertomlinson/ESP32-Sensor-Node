@@ -196,8 +196,8 @@ static void esp_mqtt_status_callback( esp_mqtt_status_t status)
 typedef enum esp_sensor_node_command_t {ESP_SN_CMD_STOP,ESP_SN_CMD_RATE,ESP_SN_CMD_PKT_LEN,ESP_SN_CMD_DISCONNECT} esp_sensor_node_command_t;
 /* create variables to control sensor node behavior. */
 /* TODO: figure out how to lock access to rate & pkt_len parameters so the control writing doesnt conflict with the update reading */
-static uint16 sensor_node_rate; /* frequency for polling ADC */
-static uint16 sensor_node_pkt_len; /* number of sample per mqtt packet during send*/
+static uint16_t sensor_node_rate; /* frequency for polling ADC */
+static uint16_t sensor_node_pkt_len; /* number of sample per mqtt packet during send*/
 
 static void esp_mqtt_message_callback(const char *topic, uint8_t *payload, size_t len)
 {
