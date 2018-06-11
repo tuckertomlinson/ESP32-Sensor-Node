@@ -36,6 +36,9 @@
 #define MQTT_PASS "testpass"
 #define MQTT_PORT "1833"
 #define MQTT_COMMAND_CHANNEL "ESP32-Node-Control"
+#define MQTT_BUFFER_SIZE 10
+#define MQTT_COMMAND_TIMEOUT 60
+#define MQTT_TOPIC "ESP32-logger/testlogging"
 
 #define DEFAULT_VREF    1100        //Use adc2_vref_to_gpio() to obtain a better estimate
 #define NO_OF_SAMPLES   64          //Multisampling
@@ -320,10 +323,11 @@ void app_main()
 	ESP_LOGI(TAG, "The current date/time in New York is: %s", strftime_buf);
 
     //begin MQTT process
-    	esp_mqtt_init(esp_mqtt_status_callback, esp_mqtt_message_callback, size_t buffer_size, int command_timeout);	
+    	esp_mqtt_init(esp_mqtt_status_callback, esp_mqtt_message_callback, MQTT_BUFFER_SIZE, MQTT_COMMAND_TIMEOUT);	
     //Establish MQTT last will and testimate
     //esp_mqtt_lwt(const char *topic, const char *payload, int qos, bool retained);
-    	esp_mqtt_start(const char *host, const char *port, const char *client_id, const char *username, const char *password);
+	/* TODO: check that the MQTT host is the correct input for "client_ID" */
+    	esp_mqtt_start(MQTT_HOST, MQTT_PORT, MQTT_HOST, MQTT_USER, MQTT_PASS);
 
     //set up ADC
 	check_efuse();
@@ -356,7 +360,8 @@ void app_main()
         	uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
 		ESP_LOGI(TAG, "Raw: %d\tVoltage: %dmV\n", adc_reading, voltage);
 		//publish ADC data
-    		esp_mqtt_publish(const char *topic, uint8_t *payload, size_t len, int qos, bool retained);
+    		//esp_mqtt_publish(topic, data, size of data, QOS level, retain);
+    		esp_mqtt_publish(MQTT_TOPIC, voltage, 1, 2, false);
 		i++;
 		vTaskDelay(pdMS_TO_TICKS(1000));
     	}
