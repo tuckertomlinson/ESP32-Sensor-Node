@@ -221,7 +221,7 @@ static void esp_mqtt_message_callback(const char *topic, uint8_t *payload, size_
 					/* note the following assumes that len only contains the number of elements in payload. If len includes the topic, or the len element itself, we need to adjust this */
 					ESP_LOGI(TAG, "Got bad sample rate packet with %d bytes",sizeof(payload[0])*len);			
 				}else{
-					memcpy(&sensor_node_rate,*payload(1),sizeof(sensor_node_rate)) /* take data from UINT8_t in payload, and convert to UINT16, or whatever sensor_node_rate is */
+					memcpy(&sensor_node_rate,*payload[1],sizeof(sensor_node_rate)) /* take data from UINT8_t in payload, and convert to UINT16, or whatever sensor_node_rate is */
 					ESP_LOGI(TAG, "Got command to set sample rate to %d hz",sensor_node_rate);
 				}
 				break;
