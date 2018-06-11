@@ -13,10 +13,15 @@ currently a MUCH better prospect for forking.
 
 Overall Project goals:
 -Sensors should be wireless, theoretically battery power capible
+
 -Synchronization should be accomplished via NTP, and be accurate to 100us or better
+
    -High accuracy NTP servers on the local network will likely be required
+
 -Sensors should be capible of collecting and sending 16 channels of data at 100hz
+
    -Stretch goal: sensors should be capible of collecting and sending 16 channels at 2khz
+
 -Sensors should send data using the widely available MQTT protocol
 
 
@@ -31,22 +36,35 @@ this schema.
 
 Status:
 -Initial code written and compiling: NOT TESTED 
+
    -Smart connect to allow user to configure wifi via cell-phone app
+
    -Includes SNTP (copied liberally from espressif's example)
+
    -read analog data from ADC (copied liberally from espressif's example
+
    -Basic MQTT 
+
       -listen for control commands
+
       -write analog data
    
 TODO:
 -decide whether smart-connect or hardcoding into the firmware is the right way to do network connection
+
 -update SNTP to full NTP spec
+
    -can use SNTP calls to get network time, but will need to implement local timestamping, buffers, and
     clock updating ala adjusttime
+
 -add timestamps to analog data in the MQTT packets
+
 -Design new PCB that integrates SPI ADC
+
    -Will need new code for the SPI communication
+
    -Will probably use FTDI for programming/communication with the microcontroller to avoid usb->serial
     components onboard
+
 -change 10 sample while loop to be some continuous sampling process
 
