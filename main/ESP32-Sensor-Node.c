@@ -203,7 +203,7 @@ static void esp_mqtt_message_callback(const char *topic, uint8_t *payload, size_
 {
 	esp_sensor_node_command_t control_code;
 	/* To Do: update with node spcific sub-channels. For now all nodes respond the same way*/
-	if strcmp(topic, "command"){
+	if (strcmp(topic, "command")) {
 		control_code=payload(0);
 		switch (control_code){
 			case ESP_SN_CMD_STOP
