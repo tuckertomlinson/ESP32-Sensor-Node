@@ -136,6 +136,7 @@ static void initialise_wifi(void)
 
 static void sc_callback(smartconfig_status_t status, void *pdata)
 {
+	/* copied directly from smartconfig example in esp-idf*/
     switch (status) {
         case SC_STATUS_WAIT:
             ESP_LOGI(TAG, "SC_STATUS_WAIT");
@@ -164,25 +165,87 @@ static void sc_callback(smartconfig_status_t status, void *pdata)
             }
             xEventGroupSetBits(wifi_event_group, ESPTOUCH_DONE_BIT);
             break;
-    	case ESP_MQTT_STATUS_CONNECTED:
-      		// subscribe
-      		esp_mqtt_subscribe(COMMAND_CHANNEL, 2);
-      		break;
-    	case ESP_MQTT_STATUS_DISCONNECTED:
-      		// reconnect
-      		esp_mqtt_start(MQTT_HOST, MQTT_PORT, "esp-mqtt", MQTT_USER, MQTT_PASS);
-		break;
         default:
             break;
     }
 }
-static void message_callback(const char *topic, uint8_t *payload, size_t len) {
-	//callback for MQTT messages
-	//TODO, check command and update frequency, or start/stop streaming
-  	ESP_LOGI("test", "incoming: %s => %s (%d)", topic, payload, (int)len);
+static void esp_mqtt_status_callback( esp_mqtt_status_t status)
+{
+	/* callback for mqtt status events */
+	switch (status) {
+    		case ESP_MQTT_STATUS_CONNECTED:
+      			// subscribe
+      			esp_mqtt_subscribe(MQTT_COMMAND_CHANNEL, 2);
+      			break;
+    		case ESP_MQTT_STATUS_DISCONNECTED:
+      			// reconnect
+      			esp_mqtt_start(MQTT_HOST, MQTT_PORT, "esp-mqtt", MQTT_USER, MQTT_PASS);
+			break;
+        	default:
+        	    	break;
+	}
+		
+}
+/* 
+  establish an enum for sensor node command codes:
+    0 stop sending
+    1 start sending
+    2 rate set
+    3 packet length set
+*/
+typedef enum esp_sensor_node_command_t {ESP_SN_CMD_STOP,ESP_SN_CMD_STOP,ESP_SN_CMD_RATE,ESP_SN_CMD_PKT_LEN,ESP_SN_CMD_DISCONNECT} esp_sensor_node_command_t;
+/* create variables to control sensor node behavior. */
+/* TODO: figure out how to lock access to rate & pkt_len parameters so the control writing doesnt conflict with the update reading */
+static uint16 sensor_node_rate; /* frequency for polling ADC */
+static uint16 sensor_node_pkt_len; /* number of sample per mqtt packet during send*/
+
+static void esp_mqtt_message_callback(const char *topic, uint8_t *payload, size_t len)
+{
+	esp_sensor_node_command_t control_code;
+	/* To Do: update with node spcific sub-channels. For now all nodes respond the same way*/
+	if strcmp(topic, "command"){
+		control_code=payload(0);
+		switch (control_code){
+			case ESP_SN_CMD_STOP
+				/* stop sending data*/
+				/* NOTE: stop function built into esp_mqtt.c disconnects network after disconnecting from broker */
+				ESP_LOGI(TAG, "Got command to stop sending data");
+				break;
+			case ESP_SN_CMD_START
+				/* start sending data*/
+				ESP_LOGI(TAG, "Got command to start sending data");
+				break;
+			case ESP_SN_CMD_RATE
+				/* set rate at which the ADC will be polled */
+				if len!=sizeof(sensor_node_rate)/sizeof(payload){
+					/* note the following assumes that len only contains the number of elements in payload. If len includes the topic, or the len element itself, we need to adjust this */
+					ESP_LOGI(TAG, "got bad sample rate packet with %d bytes",sizeof(*payload)*len);			
+				}else{
+					memcpy(&sensor_node_rate,payload(1),sizeof(sensor_node_rate)) /* take data from UINT8_t in payload, and convert to UINT16, or whatever sensor_node_rate is */
+					ESP_LOGI(TAG, "got command to set sample rate to %d hz",sensor_node_rate);
+				}
+				break;
+			case ESP_SN_CMD_PKT_LEN
+				/* set how many samples are in each packet. Sets the effective update rate */
+				if len!=sizeof(sensor_node_rate)/sizeof(payload){
+					/* note the following assumes that len only contains the number of elements in payload. If len includes the topic, or the len element itself, we need to adjust this */
+					ESP_LOGI(TAG, "got bad pkt_len packet with %d bytes",sizeof(*payload)*len);			
+				}else{
+					memcpy(&sensor_node_pkt_len,payload(1),sizeof(sensor_node_pkt_len)) /* take data from UINT8_t in payload, and convert to UINT16, or whatever sensor_node_rate is */
+					ESP_LOGI(TAG, "Got command to set packet length to %d samples",sensor_node_pkt_len);	
+				}
+				break;	
+			case ESP_SN_CMD_DISCONNECT
+				esp_mqtt_stop();		
+			default:
+				ESP_LOGI(TAG, "Got bad control code on command channel. Received code: %d",control_code);
+				break;
+		}
+	}
 }
 void smartconfig_example_task(void * parm)
 {
+	/* copied from esp-idf smartconfig example */
     EventBits_t uxBits;
     ESP_ERROR_CHECK( esp_smartconfig_set_type(SC_TYPE_ESPTOUCH) );
     ESP_ERROR_CHECK( esp_smartconfig_start(sc_callback) );
@@ -201,10 +264,10 @@ void smartconfig_example_task(void * parm)
 
 static void obtain_time(void)
 {
+	/* largely copied from esp-idf sntp example code */
     ESP_ERROR_CHECK( nvs_flash_init() );
 //    initialise_wifi();
-//    xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT,
-                        false, true, portMAX_DELAY);
+//    xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT,false, true, portMAX_DELAY);
     initialize_sntp();
 
     // wait for time to be set
@@ -219,7 +282,7 @@ static void obtain_time(void)
         localtime_r(&now, &timeinfo);
     }
 
-    ESP_ERROR_CHECK( esp_wifi_stop() );
+//    ESP_ERROR_CHECK( esp_wifi_stop() );
 }
 
 static void initialize_sntp(void)
@@ -234,6 +297,7 @@ void app_main()
 {
     	ESP_ERROR_CHECK( nvs_flash_init() );
     	initialise_wifi();
+	/* TODO: implement NTP or iterative SNTP calls and spawn process here instead of a single SNTP call to set time*/
     	time_t now;
     	struct tm timeinfo;
     	time(&now);
@@ -241,28 +305,22 @@ void app_main()
     // Is time set? If not, tm_year will be (1970 - 1900).
     	if (timeinfo.tm_year < (2016 - 1900)) {
         	ESP_LOGI(TAG, "Time is not set yet. Connecting to WiFi and getting time over NTP.");
-        	obtain_time();
+        	obtain_time(); 
         	// update 'now' variable with current time
         	time(&now);
     	}
 
     char strftime_buf[64];
     // Set timezone to Eastern Standard Time and print local time
-	setenv("TZ", "EST5EDT,M3.2.0/2,M11.1.0", 1);
+	/* TODO: figure out timezone on the fly */ 
+	setenv("TZ", "CST6CDT,M3.2.0,M11.1.0", 1);
 	tzset();
 	localtime_r(&now, &timeinfo);
 	strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
 	ESP_LOGI(TAG, "The current date/time in New York is: %s", strftime_buf);
 
-    // Set timezone to China Standard Time
-	setenv("TZ", "CST-8", 1);
-	tzset();
-    	localtime_r(&now, &timeinfo);
-    	strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-    	ESP_LOGI(TAG, "The current date/time in Shanghai is: %s", strftime_buf);
-
     //begin MQTT process
-    	esp_mqtt_init(esp_mqtt_status_callback_t scb, esp_mqtt_message_callback_t mcb, size_t buffer_size, int command_timeout);	
+    	esp_mqtt_init(esp_mqtt_status_callback, esp_mqtt_message_callback, size_t buffer_size, int command_timeout);	
     //Establish MQTT last will and testimate
     //esp_mqtt_lwt(const char *topic, const char *payload, int qos, bool retained);
     	esp_mqtt_start(const char *host, const char *port, const char *client_id, const char *username, const char *password);
@@ -278,12 +336,12 @@ void app_main()
 	uint32_t adc_reading = 0;
 
     //begin pushing data
-	//TODO: change while loop to timer watchdog/callback
+	/*TODO: change while loop to timer watchdog/callback. Ditch multisampling?*/
 	int i=0;    
-	while (i<10){
-		//grab data from ADC
+	while (i<10){  
+		/* simple 10 sample stream */
 		adc_reading = 0;
-        	//Multisampling
+		//grab data from ADC with multisampling
         	for (int i = 0; i < NO_OF_SAMPLES; i++) {
             		if (unit == ADC_UNIT_1) {
                 		adc_reading += adc1_get_raw((adc1_channel_t)channel);
