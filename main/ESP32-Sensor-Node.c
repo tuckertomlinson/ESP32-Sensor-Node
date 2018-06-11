@@ -204,7 +204,7 @@ static void esp_mqtt_message_callback(const char *topic, uint8_t *payload, size_
 	esp_sensor_node_command_t control_code;
 	/* To Do: update with node spcific sub-channels. For now all nodes respond the same way*/
 	if (strcmp(topic, "command")) {
-		control_code=payload(0);
+		control_code=payload[0];
 		switch (control_code){
 			case ESP_SN_CMD_STOP
 				/* stop sending data*/
@@ -217,19 +217,19 @@ static void esp_mqtt_message_callback(const char *topic, uint8_t *payload, size_
 				break;
 			case ESP_SN_CMD_RATE
 				/* set rate at which the ADC will be polled */
-				if len!=sizeof(sensor_node_rate)/sizeof(payload){
+				if len!=sizeof(sensor_node_rate)/sizeof(*payload){
 					/* note the following assumes that len only contains the number of elements in payload. If len includes the topic, or the len element itself, we need to adjust this */
-					ESP_LOGI(TAG, "got bad sample rate packet with %d bytes",sizeof(*payload)*len);			
+					ESP_LOGI(TAG, "got bad sample rate packet with %d bytes",sizeof(payload[0])*len);			
 				}else{
-					memcpy(&sensor_node_rate,payload(1),sizeof(sensor_node_rate)) /* take data from UINT8_t in payload, and convert to UINT16, or whatever sensor_node_rate is */
+					memcpy(&sensor_node_rate,*payload(1),sizeof(sensor_node_rate)) /* take data from UINT8_t in payload, and convert to UINT16, or whatever sensor_node_rate is */
 					ESP_LOGI(TAG, "got command to set sample rate to %d hz",sensor_node_rate);
 				}
 				break;
 			case ESP_SN_CMD_PKT_LEN
 				/* set how many samples are in each packet. Sets the effective update rate */
-				if len!=sizeof(sensor_node_rate)/sizeof(payload){
+				if len!=sizeof(sensor_node_rate)/sizeof(*payload){
 					/* note the following assumes that len only contains the number of elements in payload. If len includes the topic, or the len element itself, we need to adjust this */
-					ESP_LOGI(TAG, "got bad pkt_len packet with %d bytes",sizeof(*payload)*len);			
+					ESP_LOGI(TAG, "got bad pkt_len packet with %d bytes",sizeof(payload[0])*len);			
 				}else{
 					memcpy(&sensor_node_pkt_len,payload(1),sizeof(sensor_node_pkt_len)) /* take data from UINT8_t in payload, and convert to UINT16, or whatever sensor_node_rate is */
 					ESP_LOGI(TAG, "Got command to set packet length to %d samples",sensor_node_pkt_len);	
