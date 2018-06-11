@@ -206,16 +206,16 @@ static void esp_mqtt_message_callback(const char *topic, uint8_t *payload, size_
 	if (strcmp(topic, "command")) {
 		control_code=payload[0];
 		switch (control_code){
-			case ESP_SN_CMD_STOP
+			case ESP_SN_CMD_STOP:
 				/* stop sending data*/
 				/* NOTE: stop function built into esp_mqtt.c disconnects network after disconnecting from broker */
 				ESP_LOGI(TAG, "Got command to stop sending data");
 				break;
-			case ESP_SN_CMD_START
+			case ESP_SN_CMD_START:
 				/* start sending data*/
 				ESP_LOGI(TAG, "Got command to start sending data");
 				break;
-			case ESP_SN_CMD_RATE
+			case ESP_SN_CMD_RATE:
 				/* set rate at which the ADC will be polled */
 				if (len!=sizeof(sensor_node_rate)/sizeof(payload[0])) {
 					/* note the following assumes that len only contains the number of elements in payload. If len includes the topic, or the len element itself, we need to adjust this */
@@ -225,7 +225,7 @@ static void esp_mqtt_message_callback(const char *topic, uint8_t *payload, size_
 					ESP_LOGI(TAG, "Got command to set sample rate to %d hz",sensor_node_rate);
 				}
 				break;
-			case ESP_SN_CMD_PKT_LEN
+			case ESP_SN_CMD_PKT_LEN:
 				/* set how many samples are in each packet. Sets the effective update rate */
 				if (len!=sizeof(sensor_node_rate)/sizeof(*payload)) {
 					/* note the following assumes that len only contains the number of elements in payload. If len includes the topic, or the len element itself, we need to adjust this */
@@ -235,7 +235,7 @@ static void esp_mqtt_message_callback(const char *topic, uint8_t *payload, size_
 					ESP_LOGI(TAG, "Got command to set packet length to %d samples",sensor_node_pkt_len);	
 				}
 				break;	
-			case ESP_SN_CMD_DISCONNECT
+			case ESP_SN_CMD_DISCONNECT:
 				esp_mqtt_stop();		
 			default:
 				ESP_LOGI(TAG, "Got bad control code on command channel. Received code: %d",control_code);
